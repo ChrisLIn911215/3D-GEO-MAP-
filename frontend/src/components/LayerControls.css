@@ -1,0 +1,205 @@
+.layer-panel {
+  position: absolute;
+  top: 60px;
+  left: 14px;
+  z-index: 105;
+  width: 280px;
+  background: rgba(8, 8, 10, 0.65);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 12px;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+}
+
+.layer-panel-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.layer-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.layer-item:hover  {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateX(1px);
+}
+
+.layer-item.active {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.1));
+}
+
+.layer-item input[type="checkbox"] { display: none; }
+
+.layer-text { flex: 1; display: flex; flex-direction: column; }
+.layer-label { font-size: 0.85rem; font-weight: 700; color: #ffffff; }
+.layer-desc  { font-size: 0.7rem; color: rgba(255, 255, 255, 0.72); margin-top: 1px; }
+
+.layer-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+
+.layer-badge.on {
+  background: #ffffff;
+  color: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.layer-badge.off {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.settings-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.settings-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.profile-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.profile-btn {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.profile-btn.active {
+  color: #0e141a;
+  background: #cfe9fb;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.profile-label {
+  margin-top: 7px;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.i3s-buttons {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.i3s-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+  padding: 7px 9px;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+
+.i3s-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.i3s-btn.active {
+  background: linear-gradient(90deg, rgba(207, 233, 251, 0.9), rgba(153, 214, 248, 0.85));
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #102531;
+}
+
+.i3s-btn-label {
+  font-size: 0.77rem;
+  font-weight: 700;
+}
+
+.i3s-btn-desc {
+  font-size: 0.67rem;
+  opacity: 0.88;
+}
+
+.setting-list {
+  margin-top: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-name {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.setting-value {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #ecf8ff;
+}
+
+.setting-item input[type="range"] {
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .layer-panel {
+    top: 64px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+}

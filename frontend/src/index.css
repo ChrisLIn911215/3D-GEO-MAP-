@@ -1,0 +1,22 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --med-blue-900: #0f3e66;
+  --med-blue-800: #145484;
+  --med-blue-700: #1f6fa6;
+  --med-blue-500: #3aa5dd;
+  --med-white-100: #f7fbff;
+  --med-white-200: #eaf4ff;
+  --med-ink: #17354d;
+  --med-ink-soft: #3a647f;
+  --med-glass: rgba(255, 255, 255, 0.78);
+  --med-border: rgba(20, 84, 132, 0.24);
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Noto Sans TC', 'Segoe UI', 'Trebuchet MS', sans-serif;
+  color: var(--med-ink);
+}
