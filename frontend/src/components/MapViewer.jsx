@@ -372,16 +372,23 @@ function createI3S(url) {
 }
 
 function ensureGroupProvidersLoaded(viewer, refs, key, urls, createProvider, onAfterEach) {
+  if (!viewer || viewer.isDestroyed()) return false
+
   const state = getGroupLoadState(refs, key)
   const currentLayers = refs.current.layerState || {}
   if (!currentLayers[key]) {
     return false
   }
 
-  const loaded = getGroupTilesets(refs, key)
-  const loadedSet = new Set(loaded.map((ts) => ts?.__sourceUrl).filter(Boolean))
   const settings = refs.current.renderSettings || DEFAULT_RENDER_SETTINGS
   const isBuildingGroup = key.endsWith('buildings')
+  // 建物離開顯示範圍時暫停新的來源請求；已完成的 provider 仍會保留在 scene 中。
+  if (isBuildingGroup && !isCloseFor3dBuildings(viewer, settings)) {
+    return false
+  }
+
+  const loaded = getGroupTilesets(refs, key)
+  const loadedSet = new Set(loaded.map((ts) => ts?.__sourceUrl).filter(Boolean))
   const maxConcurrentLoads = isBuildingGroup
     ? Math.max(1, Number(settings.buildingConcurrentLoads ?? 4))
     : NON_BUILDING_GROUP_CONCURRENCY
@@ -410,24 +417,37 @@ function ensureGroupProvidersLoaded(viewer, refs, key, urls, createProvider, onA
     state.loading.add(url)
 
     createProvider(url).then((provider) => {
+      if (viewer.isDestroyed()) {
+        if (typeof provider.destroy === 'function' && !provider.isDestroyed?.()) provider.destroy()
+        return
+      }
+
       provider.__sourceUrl = url
       const layerState = refs.current.layerState || {}
       const currentSettings = refs.current.renderSettings || DEFAULT_RENDER_SETTINGS
-      const canAttach = layerState[key] && (!isBuildingGroup || isCloseFor3dBuildings(viewer, currentSettings))
+      const alreadyAttached = getGroupTilesets(refs, key)
+        .some((item) => item?.__sourceUrl === url)
 
-      if (canAttach) {
-        viewer.scene.primitives.add(provider)
-        if (!Array.isArray(refs.current[key])) refs.current[key] = []
-        refs.current[key].push(provider)
-        const center = getProviderCenterLonLat(provider)
-        if (center) {
-          getGroupSourceCenters(refs, key).set(url, center)
-        }
-        if (key === 'nlsc_buildings') {
-          registerNlscBuildingIndexer(refs, provider)
-        }
-        onAfterEach(provider)
+      if (alreadyAttached) {
+        if (typeof provider.destroy === 'function' && !provider.isDestroyed?.()) provider.destroy()
+        return
       }
+
+      // 即使請求完成時圖層已關閉或鏡頭已拉遠，也把 provider 隱藏保留。
+      // 之後重新開啟只切換 show，不再下載相同的 tileset.json / I3S layer。
+      provider.show = !!layerState[key]
+        && (!isBuildingGroup || isCloseFor3dBuildings(viewer, currentSettings))
+      viewer.scene.primitives.add(provider)
+      if (!Array.isArray(refs.current[key])) refs.current[key] = []
+      refs.current[key].push(provider)
+      const center = getProviderCenterLonLat(provider)
+      if (center) {
+        getGroupSourceCenters(refs, key).set(url, center)
+      }
+      if (key === 'nlsc_buildings') {
+        registerNlscBuildingIndexer(refs, provider)
+      }
+      onAfterEach(provider)
     }).catch((error) => {
       const retries = (state.retryCounts.get(url) || 0) + 1
       state.retryCounts.set(url, retries)
@@ -466,10 +486,12 @@ function createTileset(url) {
   }
 
   return Cesium3DTileset.fromUrl(sourceUrl, {
-    // ── LOD 策略 ────────────────────────────────────────────────────
+    // ── LOD 策略：略過中間層級，直接請求目前視角需要的最佳解析度 ─────
     maximumScreenSpaceError:  10,
-    skipLevelOfDetail:        false,
-    preferLeaves:             false,
+    skipLevelOfDetail:        true,
+    preferLeaves:             true,
+    immediatelyLoadDesiredLevelOfDetail: true,
+    loadSiblings:             false,
     // ── 遠景降質 ────────────────────────────────────────────────────
     dynamicScreenSpaceError:        true,
     dynamicScreenSpaceErrorDensity: 0.00278,
@@ -479,8 +501,9 @@ function createTileset(url) {
     cullRequestsWhileMovingMultiplier: 20,
     // ── 視野中心優先 ─────────────────────────────────────────────────
     foveatedScreenSpaceError: false,
-    // ── 記憶體上限 ──────────────────────────────────────────────────
-    maximumMemoryUsage: 1024,
+    // ── 保留已載入的高解析度 tile，減少移回相同區域時重新請求 ────────
+    cacheBytes: 256 * 1024 * 1024,
+    maximumCacheOverflowBytes: 256 * 1024 * 1024,
     preloadWhenHidden: false,
     cullWithChildrenBounds: true,
   })
@@ -540,20 +563,12 @@ function isCloseFor3dBuildings(viewer, settings) {
 function ensureCloseRangeBuildingLoads(viewer, refs, layers, settings) {
   const inBuildingRange = isCloseFor3dBuildings(viewer, settings)
 
+  if (refs.current.buildings) {
+    refs.current.buildings.show = !!layers.buildings && inBuildingRange
+  }
+  syncTilesetVisibilityByView(viewer, refs, layers, settings)
+
   if (!inBuildingRange) {
-    if (refs.current.buildings) {
-      viewer.scene.primitives.remove(refs.current.buildings)
-      refs.current.buildings = null
-    }
-
-    if (getGroupTilesets(refs, 'nlsc_buildings').length > 0) {
-      removeGroupTilesets(viewer, refs, 'nlsc_buildings')
-    }
-
-    if (getGroupTilesets(refs, 'i3s_buildings').length > 0) {
-      removeGroupTilesets(viewer, refs, 'i3s_buildings')
-    }
-
     return
   }
 
@@ -562,11 +577,24 @@ function ensureCloseRangeBuildingLoads(viewer, refs, layers, settings) {
     import('cesium').then(({ Cesium3DTileset }) => {
       Cesium3DTileset.fromIonAssetId(96188, {
         maximumScreenSpaceError: 16,
+        skipLevelOfDetail: true,
+        preferLeaves: true,
+        immediatelyLoadDesiredLevelOfDetail: true,
+        loadSiblings: false,
         dynamicScreenSpaceError: true,
-        maximumMemoryUsage: 256,
+        cacheBytes: 256 * 1024 * 1024,
+        maximumCacheOverflowBytes: 128 * 1024 * 1024,
         preloadWhenHidden: false,
         cullWithChildrenBounds: true,
       }).then((ts) => {
+        if (viewer.isDestroyed()) return
+        if (refs.current.buildings) {
+          if (typeof ts.destroy === 'function' && !ts.isDestroyed?.()) ts.destroy()
+          return
+        }
+
+        ts.show = !!(refs.current.layerState || {}).buildings
+          && isCloseFor3dBuildings(viewer, refs.current.renderSettings || DEFAULT_RENDER_SETTINGS)
         viewer.scene.primitives.add(ts)
         refs.current.buildings = ts
         viewer.scene.requestRender()
@@ -1337,7 +1365,7 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
     )
 
     scene.globe.maximumScreenSpaceError = 1
-    scene.globe.tileCacheSize = 100           // 限制地形 tile 快取數
+    scene.globe.tileCacheSize = 300           // 多保留已載入瓦片，降低往返相同區域的重複請求
     scene.globe.preloadAncestors = true       // 避免視角變化時出現大面積破圖
     scene.globe.preloadSiblings = true        // 保留邊界鄰接 tile 以維持連續性
     scene.globe.enableLighting = false        // 關閉球面光照
@@ -1483,10 +1511,9 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
 
     syncTerrainVisibility(viewer, refs, layers, settings)
 
-    // OSM 3D Buildings (Cesium ion asset 96188)
-    if (!layers.buildings && refs.current.buildings) {
-      viewer.scene.primitives.remove(refs.current.buildings)
-      refs.current.buildings = null
+    // OSM 3D Buildings (Cesium ion asset 96188)：只切換顯示，不移除快取。
+    if (refs.current.buildings) {
+      refs.current.buildings.show = !!layers.buildings && isCloseFor3dBuildings(viewer, settings)
     }
 
     // 國土測繪中心 3D Tiles（三個群組圖層）
@@ -1494,15 +1521,14 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
       if (key === 'nlsc_buildings') continue
       if (layers[key]) {
         ensureGroupTilesetsLoaded(viewer, refs, key, urls, () => {
-          syncTilesetVisibilityByView(viewer, refs, layers, settings)
+          syncTilesetVisibilityByView(
+            viewer,
+            refs,
+            refs.current.layerState || {},
+            refs.current.renderSettings || DEFAULT_RENDER_SETTINGS
+          )
         })
-      } else if (getGroupTilesets(refs, key).length > 0) {
-        removeGroupTilesets(viewer, refs, key)
       }
-    }
-
-    if (!layers.nlsc_buildings && getGroupTilesets(refs, 'nlsc_buildings').length > 0) {
-      removeGroupTilesets(viewer, refs, 'nlsc_buildings')
     }
 
     // I3S 三個群組圖層
@@ -1510,15 +1536,14 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
       if (key === 'i3s_buildings') continue
       if (layers[key]) {
         ensureGroupI3SLoaded(viewer, refs, key, urls, () => {
-          syncTilesetVisibilityByView(viewer, refs, layers, settings)
+          syncTilesetVisibilityByView(
+            viewer,
+            refs,
+            refs.current.layerState || {},
+            refs.current.renderSettings || DEFAULT_RENDER_SETTINGS
+          )
         })
-      } else if (getGroupTilesets(refs, key).length > 0) {
-        removeGroupTilesets(viewer, refs, key)
       }
-    }
-
-    if (!layers.i3s_buildings && getGroupTilesets(refs, 'i3s_buildings').length > 0) {
-      removeGroupTilesets(viewer, refs, 'i3s_buildings')
     }
 
     ensureCloseRangeBuildingLoads(viewer, refs, layers, settings)
