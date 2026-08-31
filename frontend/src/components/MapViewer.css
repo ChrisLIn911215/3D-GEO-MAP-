@@ -16,6 +16,27 @@
 	color: #17354d;
 }
 
+.map-search-header {
+	margin: 0 2px 8px;
+	color: #145484;
+}
+
+.map-search-title {
+	font-size: 0.78rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+}
+
+.map-search-collapse-btn {
+	border-color: rgba(20, 84, 132, 0.25);
+	background: rgba(20, 84, 132, 0.08);
+	color: #145484;
+}
+
+.map-search-panel.is-collapsed {
+	width: 132px;
+}
+
 .map-search-form {
 	display: grid;
 	grid-template-columns: 1fr auto;

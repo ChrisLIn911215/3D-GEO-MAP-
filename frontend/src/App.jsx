@@ -22,6 +22,8 @@ const INITIAL_LAYERS = {
 }
 
 const EXCLUSIVE_BASEMAP_KEYS = ['osm', 'global_satellite']
+const BUILDING_LAYER_KEYS = ['buildings', 'nlsc_buildings', 'i3s_buildings']
+const HAS_CESIUM_TERRAIN = !!import.meta.env.VITE_CESIUM_TOKEN
 
 const FEATURE_LIST_CONFIG = [
   { key: 'road_cameras', label: '道路監視器', desc: '即時影像監視器' },
@@ -75,6 +77,10 @@ function App() {
       }
 
       next[key] = nextValue
+      // 3D 建物含有絕對高程；有 Cesium token 時同步開啟地形，避免相對零高程球面懸空。
+      if (nextValue && HAS_CESIUM_TERRAIN && BUILDING_LAYER_KEYS.includes(key)) {
+        next.terrain_cesium = true
+      }
       return next
     })
 

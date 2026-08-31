@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import './LayerControls.css'
 
 // Mirror the keys defined in App.jsx INITIAL_LAYERS
@@ -120,10 +121,26 @@ export default function LayerControls({
   onApplyProfile,
   onUpdateSetting,
 }) {
-  return (
-    <aside className="layer-panel" aria-label="Layer Controls">
-      <div className="layer-panel-title">Layers</div>
+  const [collapsed, setCollapsed] = useState(false)
 
+  return (
+    <aside className={`layer-panel ${collapsed ? 'is-collapsed' : ''}`} aria-label="Layer Controls">
+      <div className="layer-panel-header">
+        <div className="layer-panel-title">Layers</div>
+        <button
+          type="button"
+          className="panel-collapse-btn"
+          onClick={() => setCollapsed((value) => !value)}
+          aria-expanded={!collapsed}
+          aria-controls="layer-panel-content"
+          title={collapsed ? '展開圖層面板' : '收合圖層面板'}
+        >
+          <span aria-hidden="true">{collapsed ? '＋' : '−'}</span>
+          <span className="sr-only">{collapsed ? '展開' : '收合'}</span>
+        </button>
+      </div>
+
+      <div id="layer-panel-content" hidden={collapsed}>
       <ul className="layer-list">
         {LAYER_CONFIG.map(({ key, label, icon, desc }) => (
           <li key={key}>
@@ -220,6 +237,7 @@ export default function LayerControls({
             </label>
           ))}
         </div>
+      </div>
       </div>
     </aside>
   )

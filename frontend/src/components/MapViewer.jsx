@@ -197,8 +197,12 @@ const PICK_PROPERTY_CACHE_TTL_MS = 5 * 60 * 1000
 const PICK_PROPERTY_CACHE_MAX = 5000
 const TWIPCAM_CAM_LIST_URL = 'https://www.twipcam.com/api/v1/cam-list.json'
 const ROAD_CAMERA_MAX_COUNT = 2500
+const I3S_GEOID_SERVICE_URL =
+  'https://tiles.arcgis.com/tiles/GVgbJbqm8hXASVYi/arcgis/rest/services/EGM2008/ImageServer'
 
 const OSM_URL = 'https://tile.openstreetmap.org/'
+
+let i3sGeoidProviderPromise = null
 
 const DEFAULT_RENDER_SETTINGS = {
   resolutionScaleMax: 2,
@@ -355,19 +359,46 @@ function normalizeSourceUrl(url) {
   return value || null
 }
 
-function createI3S(url) {
+function getI3SGeoidProvider(ArcGISTiledElevationTerrainProvider) {
+  if (!i3sGeoidProviderPromise) {
+    i3sGeoidProviderPromise = ArcGISTiledElevationTerrainProvider
+      .fromUrl(I3S_GEOID_SERVICE_URL)
+      .catch((error) => {
+        console.warn('[I3S] Geoid 高程校正服務無法載入，改用原始高程。', error)
+        return null
+      })
+  }
+  return i3sGeoidProviderPromise
+}
+
+async function createI3S(url) {
   const sourceUrl = normalizeSourceUrl(url)
   if (!sourceUrl) {
-    return Promise.reject(new Error('I3S source URL is missing'))
+    throw new Error('I3S source URL is missing')
   }
 
-  return import('cesium').then(({ I3SDataProvider }) => {
-    if (!I3SDataProvider || typeof I3SDataProvider.fromUrl !== 'function') {
-      throw new Error('Cesium I3SDataProvider is unavailable in current version')
-    }
-    return I3SDataProvider.fromUrl(sourceUrl, {
-      showFeatures: true,
-    })
+  const { ArcGISTiledElevationTerrainProvider, I3SDataProvider } = await import('cesium')
+  if (!I3SDataProvider || typeof I3SDataProvider.fromUrl !== 'function') {
+    throw new Error('Cesium I3SDataProvider is unavailable in current version')
+  }
+
+  const geoidTiledTerrainProvider = ArcGISTiledElevationTerrainProvider
+    ? await getI3SGeoidProvider(ArcGISTiledElevationTerrainProvider)
+    : null
+
+  return I3SDataProvider.fromUrl(sourceUrl, {
+    showFeatures: true,
+    ...(geoidTiledTerrainProvider ? { geoidTiledTerrainProvider } : {}),
+    cesium3dTilesetOptions: {
+      skipLevelOfDetail: true,
+      preferLeaves: true,
+      immediatelyLoadDesiredLevelOfDetail: true,
+      loadSiblings: false,
+      cacheBytes: 256 * 1024 * 1024,
+      maximumCacheOverflowBytes: 128 * 1024 * 1024,
+      preloadWhenHidden: false,
+      cullWithChildrenBounds: true,
+    },
   })
 }
 
@@ -1282,6 +1313,7 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
   const [pickInfo, setPickInfo] = useState(null)
   const [renderError, setRenderError] = useState('')
   const [searchText, setSearchText] = useState('')
+  const [searchCollapsed, setSearchCollapsed] = useState(false)
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -1368,6 +1400,7 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
     scene.globe.tileCacheSize = 300           // 多保留已載入瓦片，降低往返相同區域的重複請求
     scene.globe.preloadAncestors = true       // 避免視角變化時出現大面積破圖
     scene.globe.preloadSiblings = true        // 保留邊界鄰接 tile 以維持連續性
+    scene.globe.depthTestAgainstTerrain = true // 讓地形遮蔽低於地表的建物部分，消除懸浮感
     scene.globe.enableLighting = false        // 關閉球面光照
     scene.fog.enabled = true                  // 霧效讓遠處 tile 不需載入
     scene.fog.density = 0.0002
@@ -1695,7 +1728,22 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
   return (
     <>
       <div ref={containerRef} className="map-container" />
-      <aside className="map-search-panel" aria-label="Map Search">
+      <aside className={`map-search-panel ${searchCollapsed ? 'is-collapsed' : ''}`} aria-label="Map Search">
+        <div className="map-search-header">
+          <span className="map-search-title">地圖搜尋</span>
+          <button
+            type="button"
+            className="panel-collapse-btn map-search-collapse-btn"
+            onClick={() => setSearchCollapsed((value) => !value)}
+            aria-expanded={!searchCollapsed}
+            aria-controls="map-search-content"
+            title={searchCollapsed ? '展開搜尋面板' : '收合搜尋面板'}
+          >
+            <span aria-hidden="true">{searchCollapsed ? '＋' : '−'}</span>
+            <span className="sr-only">{searchCollapsed ? '展開' : '收合'}</span>
+          </button>
+        </div>
+        <div id="map-search-content" hidden={searchCollapsed}>
         <form onSubmit={handleSearchSubmit} className="map-search-form">
           <input
             type="text"
@@ -1728,6 +1776,7 @@ export default function MapViewer({ layers, sceneMode, renderSettings }) {
             ))}
           </ul>
         )}
+        </div>
       </aside>
       {layers.road_cameras && (
         <aside className="road-camera-status-panel" aria-label="Road Camera Status">
